@@ -480,7 +480,7 @@
   <div id="main-content"></div>
 
   <div class="footer">
-    Bot piloté · v1 · <span id="last-sync"></span>
+    Bot piloté · v2 · <span id="last-sync"></span>
   </div>
 </div>
 
@@ -672,7 +672,23 @@ async function cronApi(method, path, body) {
 
 async function cronListJobs() {
   const data = await cronApi('GET', '/jobs');
-  return data.jobs || [];
+  const jobs = data.jobs || [];
+  // La liste renvoyée par cron-job.org est un résumé SANS extendedData
+  // (headers/body). Or c'est dans le body qu'on reconnaît strikes, watchers
+  // et métronomes → on récupère le détail de chaque job, un par un
+  // (séquentiel pour respecter les limites de débit de leur API).
+  const detailed = [];
+  for (const j of jobs) {
+    try {
+      const res = await cronApi('GET', '/jobs/' + j.jobId);
+      const detail = (res && (res.jobDetails || res.job)) || {};
+      detailed.push({ ...j, ...detail, jobId: j.jobId });
+    } catch (e) {
+      console.error('détail job', j.jobId, e);
+      detailed.push(j); // au pire : job non reconnu, mais l'app reste fonctionnelle
+    }
+  }
+  return detailed;
 }
 
 // Construit la définition d'un cron pour le mode STRIKE
