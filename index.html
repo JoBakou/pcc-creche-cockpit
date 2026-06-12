@@ -190,6 +190,29 @@
     cursor: not-allowed;
     opacity: 0.5;
   }
+  .slot.booked {
+    background: var(--success-soft);
+    color: var(--success);
+    border-color: var(--success);
+    cursor: default;
+  }
+  .slot.auto {
+    background: var(--info-soft);
+    color: #1E5BA8;
+    border-color: var(--info);
+    cursor: default;
+  }
+  .bookings-note {
+    font-size: 12px;
+    color: var(--ink-faint);
+    margin: -6px 0 12px;
+  }
+  .bookings-note.warn {
+    color: #8A6D1A;
+    background: var(--warn-soft);
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+  }
   .slot .meta {
     display: block;
     font-size: 10px;
@@ -686,6 +709,9 @@ function buildStrikeCronDef(targetIso, targetHour, ghToken, ghRepo) {
     saveResponses: false,
     schedule: {
       timezone: 'Europe/Paris',
+      // Auto-expiration en fin de journée d'ouverture : sans ça, cron-job.org
+      // referait sonner ce réveil chaque année à la même date (zombie annuel).
+      expiresAt: Number(`${y}${pad2(m)}${pad2(d)}235959`),
       hours: [triggerHour],
       minutes: [triggerMinute],
       mdays: [d],
@@ -728,6 +754,9 @@ function buildWatcherCronDef(targetIso, targetHour, ghToken, ghRepo) {
     saveResponses: false,
     schedule: {
       timezone: 'Europe/Paris',
+      // Auto-arrêt à l'heure du créneau : un watcher oublié sonnerait sinon
+      // chaque minute, pour toujours (et viderait le quota GitHub Actions).
+      expiresAt: Number(`${y}${pad2(m)}${pad2(d)}${pad2(targetHour)}0000`),
       hours: [-1],
       minutes: [-1],
       mdays: [-1],
@@ -753,8 +782,20 @@ function buildWatcherCronDef(targetIso, targetHour, ghToken, ghRepo) {
 }
 
 async function cronCreate(jobDef) {
-  const res = await cronApi('PUT', '/jobs', { job: jobDef });
-  return res.jobId;
+  try {
+    const res = await cronApi('PUT', '/jobs', { job: jobDef });
+    return res.jobId;
+  } catch (e) {
+    // Filet de sécurité : si l'API refuse le champ expiresAt, on retente sans
+    // (le ménage automatique prendra le relais pour éviter les zombies).
+    if (jobDef.schedule && jobDef.schedule.expiresAt) {
+      const fallback = { ...jobDef, schedule: { ...jobDef.schedule } };
+      delete fallback.schedule.expiresAt;
+      const res = await cronApi('PUT', '/jobs', { job: fallback });
+      return res.jobId;
+    }
+    throw e;
+  }
 }
 
 async function cronDelete(jobId) {
@@ -784,6 +825,52 @@ async function ghListRuns(limit = 10) {
   return data.workflow_runs || [];
 }
 
+// Lit le registre reservations.json (tenu à jour par le bot) dans le repo privé.
+// Nécessite la permission "Contents : Read-only" sur le token GitHub fine-grained.
+async function ghFetchBookings() {
+  const token = getStorage(STORAGE_KEYS.ghToken);
+  const repo = getStorage(STORAGE_KEYS.ghRepo, DEFAULTS.ghRepo);
+  if (!token) return null;
+  const r = await fetch(`https://api.github.com/repos/${repo}/contents/reservations.json?ref=main`, {
+    cache: 'no-store',
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Accept': 'application/vnd.github.raw+json',
+      'X-GitHub-Api-Version': '2022-11-28'
+    }
+  });
+  if (!r.ok) throw new Error('GitHub HTTP ' + r.status);
+  return r.json();
+}
+
+// Clé "date|heure" en heure de Paris pour un instant UTC.
+// Ex : "2026-06-14T11:00:00.000Z" → "2026-06-14|13" (été, UTC+2)
+function parisKeyFromUTC(utcIso) {
+  const s = new Date(utcIso).toLocaleString('sv-SE', { timeZone: 'Europe/Paris' });
+  const [datePart, timePart] = s.split(' ');
+  return datePart + '|' + parseInt(timePart.split(':')[0], 10);
+}
+
+function buildBookedKeys(bookings) {
+  const set = new Set();
+  (bookings || []).forEach(b => {
+    if (!b || !b.start) return;
+    const label = ((b.label || '') + ' ' + (b.group || '')).toUpperCase();
+    if (!label.includes(TASK_NAME)) return;
+    try { set.add(parisKeyFromUTC(b.start)); } catch (e) { /* date illisible : on ignore */ }
+  });
+  return set;
+}
+
+function formatAgo(iso) {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "à l'instant";
+  if (mins < 60) return `il y a ${mins} min`;
+  const h = Math.round(mins / 60);
+  if (h < 24) return `il y a ${h} h`;
+  return `il y a ${Math.round(h / 24)} j`;
+}
+
 // ============================================================
 // STATE & RENDERING
 // ============================================================
@@ -791,6 +878,9 @@ const state = {
   jobs: [],          // Tous les jobs cron-job.org
   openDates: [],     // Prochaines dates ouvrables
   runs: [],          // Derniers runs GitHub
+  bookedKeys: new Set(),    // Créneaux déjà réservés (clés "date|heure" Paris)
+  bookingsUpdatedAt: null,  // Fraîcheur du registre reservations.json
+  bookingsError: false,     // true si le registre est illisible (permission token ?)
   watcherHour: 13,
   loading: false
 };
@@ -803,6 +893,21 @@ function setStatus(text, type) {
 
 function hasCredentials() {
   return !!getStorage(STORAGE_KEYS.ghToken) && !!getStorage(STORAGE_KEYS.cronKey);
+}
+
+// Détecte les crons auto_strike permanents (métronomes jeudi/vendredi 12h55)
+// et en déduit les jours couverts : jeudi → samedi 13h, vendredi → dimanche 13h.
+function metronomeCoverage() {
+  let sat = false, sun = false;
+  state.jobs.forEach(j => {
+    if (!j.enabled) return;
+    const body = (j.extendedData && j.extendedData.body) || '';
+    if (!body.includes('"mode":"auto_strike"')) return;
+    const wd = (j.schedule && j.schedule.wdays) || [];
+    if (wd.includes(-1) || wd.includes(4)) sat = true;  // cron du jeudi
+    if (wd.includes(-1) || wd.includes(5)) sun = true;  // cron du vendredi
+  });
+  return { sat, sun };
 }
 
 // Trouve un job strike correspondant à une date+heure cible
@@ -879,7 +984,13 @@ function renderStrikes() {
   const todayIso = toISODate(now);
   const currentHour = now.getHours();
 
+  const auto = metronomeCoverage();
   let html = '<div class="section"><h2><span class="emoji">🎯</span> Strikes programmés</h2>';
+  if (state.bookingsError) {
+    html += `<div class="bookings-note warn">Badges « Réservé » indisponibles — vérifie que ton token GitHub a la permission <b>Contents : Read-only</b>.</div>`;
+  } else if (state.bookingsUpdatedAt) {
+    html += `<div class="bookings-note">Réservations synchronisées ${formatAgo(state.bookingsUpdatedAt)}</div>`;
+  }
   state.openDates.forEach(item => {
     const isToday = item.iso === todayIso;
     const dayClass = isToday ? 'date-day today' : 'date-day';
@@ -894,6 +1005,7 @@ function renderStrikes() {
     html += `<div class="date-header"><div class="${dayClass}">${formatDateShort(item.date)}</div>${badge}</div>`;
     html += `<div class="slots">`;
     SLOTS.forEach(h => {
+      const booked = state.bookedKeys.has(item.iso + '|' + h);
       const job = findStrikeJob(item.iso, h);
       const armed = !!(job && job.enabled);
       // Le strike est "passé" si l'ouverture J-2 à h est dépassée
@@ -901,14 +1013,28 @@ function renderStrikes() {
       const openingDate = new Date(opening.date);
       openingDate.setHours(h, 0, 0, 0);
       const passed = openingDate < now;
-      const cls = passed ? 'slot passed' : (armed ? 'slot armed' : 'slot');
-      const dataAttr = passed ? '' : `data-iso="${item.iso}" data-hour="${h}" data-job-id="${job ? job.jobId : ''}"`;
-      let meta = '';
-      if (armed) meta = '<span class="meta">Armé</span>';
-      else if (!passed) {
-        meta = `<span class="meta">Ouvre ${opening.dayName.slice(0,3)} ${h}h</span>`;
-      } else {
+      const dow = item.date.getDay();
+      const isAuto = h === 13 && ((dow === 6 && auto.sat) || (dow === 0 && auto.sun));
+      let cls, meta, dataAttr = '';
+      if (booked) {
+        cls = 'slot booked';
+        meta = '<span class="meta">✓ Réservé</span>';
+      } else if (passed) {
+        cls = 'slot passed';
         meta = '<span class="meta">Passé</span>';
+      } else if (armed) {
+        // Un cron ponctuel existe : on le montre (tap = le supprimer)
+        cls = 'slot armed';
+        dataAttr = `data-iso="${item.iso}" data-hour="${h}" data-job-id="${job ? job.jobId : ''}"`;
+        meta = '<span class="meta">Armé</span>';
+      } else if (isAuto) {
+        // Couvert par le métronome permanent : pas d'armement manuel possible
+        cls = 'slot auto';
+        meta = '<span class="meta">Auto</span>';
+      } else {
+        cls = 'slot';
+        dataAttr = `data-iso="${item.iso}" data-hour="${h}" data-job-id=""`;
+        meta = `<span class="meta">Ouvre ${opening.dayName.slice(0,3)} ${h}h</span>`;
       }
       html += `<button class="${cls}" ${dataAttr}>${h}h${meta}</button>`;
     });
@@ -1072,18 +1198,45 @@ function attachWatcherHandlers() {
 }
 
 // ─── Data refresh ─────────────────────────────────────────
+// Ménage : supprime les crons strike/watcher dont la date cible est passée.
+// (Sans ça, cron-job.org les referait sonner chaque année à la même date.)
+async function cleanupStaleJobs(jobs) {
+  const today = toISODate(new Date());
+  const stale = jobs.filter(j => {
+    const body = (j.extendedData && j.extendedData.body) || '';
+    if (!body.includes('"mode":"strike"') && !body.includes('"mode":"backup"')) return false;
+    const m = body.match(/"target_date":"(\d{4}-\d{2}-\d{2})"/);
+    return !!m && m[1] < today;
+  });
+  for (const j of stale) {
+    try { await cronDelete(j.jobId); } catch (e) { console.error('cleanup', e); }
+  }
+  return stale.map(j => j.jobId);
+}
+
 async function refreshData() {
   if (!hasCredentials()) {
     renderMain();
     return;
   }
   try {
-    const [jobs, runs] = await Promise.all([
+    const [jobs, runs, bookingsData] = await Promise.all([
       cronListJobs(),
-      ghListRuns(10).catch(() => [])
+      ghListRuns(10).catch(() => []),
+      ghFetchBookings().catch(() => null)
     ]);
-    state.jobs = jobs;
+    const removed = await cleanupStaleJobs(jobs).catch(() => []);
+    state.jobs = removed.length ? jobs.filter(j => !removed.includes(j.jobId)) : jobs;
     state.runs = runs;
+    if (bookingsData && Array.isArray(bookingsData.bookings)) {
+      state.bookedKeys = buildBookedKeys(bookingsData.bookings);
+      state.bookingsUpdatedAt = bookingsData.updated_at || null;
+      state.bookingsError = false;
+    } else {
+      state.bookedKeys = new Set();
+      state.bookingsUpdatedAt = null;
+      state.bookingsError = true;
+    }
     state.openDates = nextOpenDates(28);
     document.getElementById('last-sync').textContent = 'Sync ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     renderMain();
