@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Crèche">
+<meta name="theme-color" content="#E76F51">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>PCC Crèche Cockpit</title>
+<style>
+  :root {
+    --bg-grad-start: #FFF5EE;
+    --bg-grad-end: #F0E8F5;
+    --card: #FFFFFF;
+    --ink: #1A1F36;
+    --ink-soft: #5A6378;
+    --ink-faint: #94A0B8;
+    --accent: #E76F51;
+    --accent-dark: #C84B2A;
+    --accent-soft: #FDE7DF;
+    --success: #2A9D8F;
+    --success-soft: #D4EDE9;
+    --warn: #E9C46A;
+    --warn-soft: #FAF1D6;
+    --danger: #D62828;
+    --danger-soft: #FBE0E0;
+    --info: #4A90E2;
+    --info-soft: #DCE9F8;
+    --rule: #EDE6DE;
+    --rule-strong: #D7CFC4;
+    --shadow-sm: 0 1px 2px rgba(26, 31, 54, 0.04), 0 1px 3px rgba(26, 31, 54, 0.06);
+    --shadow-md: 0 4px 12px rgba(26, 31, 54, 0.08);
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: linear-gradient(160deg, var(--bg-grad-start) 0%, var(--bg-grad-end) 100%);
+    background-attachment: fixed;
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 24px);
+  }
+  /* Header */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    padding-top: 8px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: var(--shadow-md);
+  }
+  .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+  .brand-text .name {
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: -0.01em;
+  }
+  .brand-text .tag {
+    font-size: 12px;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 2px;
+  }
+  .icon-btn {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    color: var(--ink-soft);
+  }
+  .icon-btn:active { transform: scale(0.96); }
+
+  /* Sections */
+  .section {
+    background: var(--card);
+    border-radius: var(--radius-lg);
+    padding: 20px 18px;
+    margin-bottom: 18px;
+    box-shadow: var(--shadow-md);
+  }
+  .section h2 {
+    margin: 0 0 14px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-soft);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section h2 .emoji { font-size: 16px; }
+
+  /* Date cards */
+  .date-card {
+    border-bottom: 1px solid var(--rule);
+    padding: 14px 0;
+  }
+  .date-card:last-child { border-bottom: none; padding-bottom: 4px; }
+  .date-card:first-child { padding-top: 0; }
+  .date-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .date-day {
+    font-weight: 600;
+    font-size: 16px;
+    letter-spacing: -0.01em;
+  }
+  .date-day.today { color: var(--accent); }
+  .date-badge {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--warn-soft);
+    color: #8B6914;
+    padding: 3px 8px;
+    border-radius: 999px;
+  }
+  .date-badge.holiday { background: var(--info-soft); color: #1E5BA8; }
+  .date-badge.passed { background: #F0F0F0; color: var(--ink-faint); }
+  .slots {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .slot {
+    background: #F7F4F0;
+    border: 1.5px solid transparent;
+    border-radius: var(--radius-md);
+    padding: 12px 8px;
+    text-align: center;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    transition: all 0.12s ease;
+    position: relative;
+  }
+  .slot:active { transform: scale(0.97); }
+  .slot.armed {
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    border-color: var(--accent);
+  }
+  .slot.passed {
+    background: #FAFAFA;
+    color: var(--ink-faint);
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .slot .meta {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 2px;
+    opacity: 0.7;
+  }
+  .slot.loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.6);
+    border-radius: var(--radius-md);
+  }
+
+  /* Watcher section */
+  .watcher-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .field select, .field input {
+    appearance: none;
+    -webkit-appearance: none;
+    background: #F7F4F0;
+    border: 1.5px solid transparent;
+    border-radius: var(--radius-md);
+    padding: 14px;
+    font-size: 16px;
+    color: var(--ink);
+    font-family: inherit;
+    width: 100%;
+  }
+  .field select:focus, .field input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--card);
+  }
+  .hour-pills {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .hour-pill {
+    background: #F7F4F0;
+    border: 1.5px solid transparent;
+    border-radius: var(--radius-md);
+    padding: 12px;
+    text-align: center;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--ink-soft);
+  }
+  .hour-pill.selected {
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    border-color: var(--accent);
+  }
+  .btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 14px 18px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    box-shadow: 0 2px 8px rgba(231, 111, 81, 0.25);
+    font-family: inherit;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn.secondary {
+    background: var(--card);
+    color: var(--ink);
+    border: 1.5px solid var(--rule-strong);
+    box-shadow: none;
+  }
+  .btn.danger { background: var(--danger); box-shadow: 0 2px 8px rgba(214, 40, 40, 0.25); }
+
+  .watchers-list {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+  }
+  .watchers-list .label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+  .watcher-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    background: var(--success-soft);
+    border-radius: var(--radius-md);
+    margin-bottom: 8px;
+  }
+  .watcher-item .info { font-weight: 600; font-size: 14px; color: #1A6157; }
+  .watcher-item .stop-btn {
+    background: transparent;
+    border: 1px solid #1A6157;
+    color: #1A6157;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* Status banner */
+  .status-banner {
+    background: var(--warn-soft);
+    color: #8B6914;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .status-banner.err { background: var(--danger-soft); color: var(--danger); }
+  .status-banner.ok { background: var(--success-soft); color: #1A6157; }
+  .status-banner.info { background: var(--info-soft); color: #1E5BA8; }
+
+  /* History */
+  .history-empty {
+    color: var(--ink-faint);
+    font-size: 13px;
+    text-align: center;
+    padding: 16px 0;
+    font-style: italic;
+  }
+  .run-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: 14px;
+  }
+  .run-item:last-child { border-bottom: none; }
+  .run-item .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .run-item.ok .dot { background: var(--success); }
+  .run-item.err .dot { background: var(--danger); }
+  .run-item.pending .dot { background: var(--warn); }
+  .run-item .info { flex: 1; }
+  .run-item .info .title { font-weight: 500; }
+  .run-item .info .meta { font-size: 12px; color: var(--ink-faint); margin-top: 2px; }
+  .run-item .info a { color: var(--accent); text-decoration: none; font-weight: 500; }
+
+  /* Settings overlay */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(26, 31, 54, 0.5);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 100;
+  }
+  .overlay.active { display: flex; }
+  .sheet {
+    background: var(--card);
+    width: 100%;
+    max-width: 600px;
+    max-height: 85vh;
+    overflow-y: auto;
+    border-radius: 24px 24px 0 0;
+    padding: 20px 18px max(env(safe-area-inset-bottom), 24px);
+    animation: slideUp 0.25s ease;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(40px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .sheet h2 {
+    margin: 4px 0 18px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-transform: none;
+    color: var(--ink);
+  }
+  .sheet .field { margin-bottom: 16px; }
+  .help {
+    font-size: 12px;
+    color: var(--ink-faint);
+    margin-top: 6px;
+    line-height: 1.4;
+  }
+  .help a { color: var(--accent); }
+  .sheet .btn { margin-top: 8px; }
+
+  /* Loading */
+  .loading-dots::after {
+    content: '...';
+    animation: dots 1.2s steps(4) infinite;
+    display: inline-block;
+    width: 14px;
+    text-align: left;
+  }
+  @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60%, 100% { content: '...'; } }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    color: var(--ink-faint);
+    font-size: 11px;
+    margin-top: 20px;
+    padding-top: 16px;
+  }
+
+  /* Empty state */
+  .empty {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--ink-faint);
+    font-size: 14px;
+  }
+  .empty strong { display: block; color: var(--ink); font-size: 16px; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- Header -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-icon">👶</div>
+      <div class="brand-text">
+        <span class="name">PCC Crèche</span>
+        <span class="tag">Cockpit</span>
+      </div>
+    </div>
+    <button class="icon-btn" id="open-settings" title="Réglages">⚙︎</button>
+  </div>
+
+  <!-- Status banner (dynamic) -->
+  <div id="status"></div>
+
+  <!-- Main content -->
+  <div id="main-content"></div>
+
+  <div class="footer">
+    Bot piloté · v1 · <span id="last-sync"></span>
+  </div>
+</div>
+
+<!-- Settings overlay -->
+<div class="overlay" id="settings-overlay">
+  <div class="sheet">
+    <h2>Réglages</h2>
+    <div class="field">
+      <label>Token GitHub</label>
+      <input type="password" id="gh-token" placeholder="github_pat_...">
+      <div class="help">Permission Actions: Read and write sur le repo <code>pcc-creche-bot</code>. Stocké uniquement sur ce téléphone.</div>
+    </div>
+    <div class="field">
+      <label>Clé API cron-job.org</label>
+      <input type="password" id="cron-key" placeholder="Votre clé API">
+      <div class="help">Obtenue dans <a href="https://console.cron-job.org/settings" target="_blank">cron-job.org → Settings → API</a>.</div>
+    </div>
+    <div class="field">
+      <label>Repository GitHub</label>
+      <input type="text" id="gh-repo" placeholder="JoBakou/pcc-creche-bot" value="JoBakou/pcc-creche-bot">
+      <div class="help">Format <code>utilisateur/repo</code>.</div>
+    </div>
+    <button class="btn" id="save-settings">Enregistrer</button>
+    <button class="btn secondary" id="close-settings" style="margin-top: 8px;">Annuler</button>
+    <button class="btn danger" id="reset-data" style="margin-top: 24px;">Effacer les données locales</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG & STORAGE
+// ============================================================
+const STORAGE_KEYS = {
+  ghToken: 'pcc_gh_token',
+  cronKey: 'pcc_cron_key',
+  ghRepo: 'pcc_gh_repo'
+};
+const DEFAULTS = {
+  ghRepo: 'JoBakou/pcc-creche-bot'
+};
+const WORKFLOW_FILE = 'bot.yml';
+const TASK_NAME = 'MICRO-CRECHE';
+const SLOTS = [10, 13, 16];
+
+function getStorage(key, def) { return localStorage.getItem(key) || def || ''; }
+function setStorage(key, val) { localStorage.setItem(key, val); }
+
+// ============================================================
+// DATE UTILITIES
+// ============================================================
+const MONTH_NAMES = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+const DAY_NAMES   = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function toISODate(d) { return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+
+function easterSunday(year) {
+  // Algo de Gauss (computus grégorien)
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+
+function addDays(d, n) {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+function frenchHolidays(year) {
+  const easter = easterSunday(year);
+  return [
+    { date: new Date(year, 0, 1), name: 'Nouvel An' },
+    { date: addDays(easter, 1), name: 'Lundi de Pâques' },
+    { date: new Date(year, 4, 1), name: 'Fête du Travail' },
+    { date: new Date(year, 4, 8), name: 'Victoire 1945' },
+    { date: addDays(easter, 39), name: 'Ascension' },
+    { date: addDays(easter, 50), name: 'Lundi de Pentecôte' },
+    { date: new Date(year, 6, 14), name: 'Fête Nationale' },
+    { date: new Date(year, 7, 15), name: 'Assomption' },
+    { date: new Date(year, 10, 1), name: 'Toussaint' },
+    { date: new Date(year, 10, 11), name: 'Armistice' },
+    { date: new Date(year, 11, 25), name: 'Noël' }
+  ];
+}
+
+function holidayInfo(d) {
+  const y = d.getFullYear();
+  const all = frenchHolidays(y);
+  const iso = toISODate(d);
+  return all.find(h => toISODate(h.date) === iso);
+}
+
+function isCrecheOpenDay(d) {
+  const dow = d.getDay(); // 0=dim, 3=mer, 6=sam
+  if (dow === 0 || dow === 3 || dow === 6) return true;
+  return !!holidayInfo(d);
+}
+
+// Retourne toutes les dates d'ouverture sur les N prochains jours
+function nextOpenDates(daysHorizon = 28) {
+  const out = [];
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  for (let i = 0; i <= daysHorizon; i++) {
+    const d = addDays(now, i);
+    if (isCrecheOpenDay(d)) {
+      out.push({
+        date: d,
+        iso: toISODate(d),
+        holiday: holidayInfo(d) || null,
+        dayName: DAY_NAMES[d.getDay()]
+      });
+    }
+  }
+  return out;
+}
+
+// Conversion heure Paris → ISO UTC
+// Gère automatiquement CEST (été UTC+2) vs CET (hiver UTC+1)
+function parisToUTCISO(yyyymmdd, hour) {
+  const [y, m, dd] = yyyymmdd.split('-').map(Number);
+  // Probe: créer une date UTC à 12:00 ce jour-là, voir l'heure Paris correspondante
+  const probe = new Date(Date.UTC(y, m - 1, dd, 12, 0, 0));
+  const parisHour = parseInt(probe.toLocaleString('en-GB', {
+    timeZone: 'Europe/Paris',
+    hour: '2-digit',
+    hour12: false
+  }));
+  const offsetH = parisHour - 12; // 1 en hiver, 2 en été
+  const utcDate = new Date(Date.UTC(y, m - 1, dd, hour - offsetH, 0, 0));
+  return utcDate.toISOString().replace('.000Z', 'Z');
+}
+
+// Calcule la date+heure d'ouverture des réservations (J-2 du créneau)
+function getOpeningDateTime(targetIso, targetHour) {
+  const [y, m, d] = targetIso.split('-').map(Number);
+  const target = new Date(y, m - 1, d);
+  const opening = addDays(target, -2);
+  return {
+    iso: toISODate(opening),
+    date: opening,
+    hour: targetHour,
+    dayName: DAY_NAMES[opening.getDay()]
+  };
+}
+
+function formatDateShort(d) {
+  return `${DAY_NAMES[d.getDay()]} ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
+}
+
+// ============================================================
+// CRON-JOB.ORG API CLIENT
+// ============================================================
+const CRON_API = 'https://api.cron-job.org';
+
+async function cronApi(method, path, body) {
+  const key = getStorage(STORAGE_KEYS.cronKey);
+  if (!key) throw new Error('Clé cron-job.org manquante');
+  const r = await fetch(CRON_API + path, {
+    method,
+    headers: {
+      'Authorization': 'Bearer ' + key,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!r.ok) {
+    const text = await r.text().catch(() => '');
+    throw new Error(`cron-job.org HTTP ${r.status}: ${text.slice(0, 200)}`);
+  }
+  if (r.status === 204) return null;
+  const ct = r.headers.get('content-type') || '';
+  return ct.includes('json') ? r.json() : r.text();
+}
+
+async function cronListJobs() {
+  const data = await cronApi('GET', '/jobs');
+  return data.jobs || [];
+}
+
+// Construit la définition d'un cron pour le mode STRIKE
+function buildStrikeCronDef(targetIso, targetHour, ghToken, ghRepo) {
+  const opening = getOpeningDateTime(targetIso, targetHour);
+  const [y, m, d] = opening.iso.split('-').map(Number);
+  const strikeAtUTC = parisToUTCISO(opening.iso, targetHour);
+  const body = JSON.stringify({
+    ref: 'main',
+    inputs: {
+      mode: 'strike',
+      strike_at: strikeAtUTC,
+      target_date: targetIso,
+      target_hour: String(targetHour),
+      dry_run: 'false'
+    }
+  });
+  // On déclenche le workflow 5 minutes avant l'heure d'ouverture (le bot interne dort jusqu'au strike)
+  let triggerHour = targetHour;
+  let triggerMinute = 55;
+  if (triggerMinute >= 60) { triggerMinute -= 60; triggerHour += 1; }
+  if (triggerHour === targetHour && triggerMinute === 0) {
+    // Edge case : si on voulait déclencher pile à l'heure, retire 5 minutes propres
+    triggerHour = targetHour - 1;
+    triggerMinute = 55;
+  } else {
+    triggerHour = targetHour - 1;
+    triggerMinute = 55;
+  }
+  return {
+    title: `🎯 Strike ${formatDateShort(new Date(y, m - 1, d + 2))} ${targetHour}h`,
+    url: `https://api.github.com/repos/${ghRepo}/actions/workflows/${WORKFLOW_FILE}/dispatches`,
+    enabled: true,
+    saveResponses: false,
+    schedule: {
+      timezone: 'Europe/Paris',
+      hours: [triggerHour],
+      minutes: [triggerMinute],
+      mdays: [d],
+      months: [m],
+      wdays: [-1]
+    },
+    requestMethod: 1, // POST
+    extendedData: {
+      headers: {
+        'Authorization': 'Bearer ' + ghToken,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      },
+      body: body
+    },
+    notification: {
+      onFailure: false,
+      onSuccess: false,
+      onDisable: false
+    }
+  };
+}
+
+function buildWatcherCronDef(targetIso, targetHour, ghToken, ghRepo) {
+  const body = JSON.stringify({
+    ref: 'main',
+    inputs: {
+      mode: 'backup',
+      target_date: targetIso,
+      target_hour: String(targetHour),
+      dry_run: 'false'
+    }
+  });
+  const [y, m, d] = targetIso.split('-').map(Number);
+  return {
+    title: `👁️ Watcher ${formatDateShort(new Date(y, m - 1, d))} ${targetHour}h`,
+    url: `https://api.github.com/repos/${ghRepo}/actions/workflows/${WORKFLOW_FILE}/dispatches`,
+    enabled: true,
+    saveResponses: false,
+    schedule: {
+      timezone: 'Europe/Paris',
+      hours: [-1],
+      minutes: [-1],
+      mdays: [-1],
+      months: [-1],
+      wdays: [-1]
+    },
+    requestMethod: 1,
+    extendedData: {
+      headers: {
+        'Authorization': 'Bearer ' + ghToken,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      },
+      body: body
+    },
+    notification: {
+      onFailure: false,
+      onSuccess: false,
+      onDisable: false
+    }
+  };
+}
+
+async function cronCreate(jobDef) {
+  const res = await cronApi('PUT', '/jobs', { job: jobDef });
+  return res.jobId;
+}
+
+async function cronDelete(jobId) {
+  await cronApi('DELETE', '/jobs/' + jobId);
+}
+
+async function cronUpdate(jobId, jobDef) {
+  await cronApi('PATCH', '/jobs/' + jobId, { job: jobDef });
+}
+
+// ============================================================
+// GITHUB API CLIENT
+// ============================================================
+async function ghListRuns(limit = 10) {
+  const token = getStorage(STORAGE_KEYS.ghToken);
+  const repo = getStorage(STORAGE_KEYS.ghRepo, DEFAULTS.ghRepo);
+  if (!token) return [];
+  const r = await fetch(`https://api.github.com/repos/${repo}/actions/runs?per_page=${limit}`, {
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28'
+    }
+  });
+  if (!r.ok) throw new Error('GitHub HTTP ' + r.status);
+  const data = await r.json();
+  return data.workflow_runs || [];
+}
+
+// ============================================================
+// STATE & RENDERING
+// ============================================================
+const state = {
+  jobs: [],          // Tous les jobs cron-job.org
+  openDates: [],     // Prochaines dates ouvrables
+  runs: [],          // Derniers runs GitHub
+  watcherHour: 13,
+  loading: false
+};
+
+function setStatus(text, type) {
+  const el = document.getElementById('status');
+  if (!text) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="status-banner ${type || ''}">${text}</div>`;
+}
+
+function hasCredentials() {
+  return !!getStorage(STORAGE_KEYS.ghToken) && !!getStorage(STORAGE_KEYS.cronKey);
+}
+
+// Trouve un job strike correspondant à une date+heure cible
+function findStrikeJob(targetIso, targetHour) {
+  const expectedBodyFragment = `"target_date":"${targetIso}"`;
+  const expectedHour = `"target_hour":"${targetHour}"`;
+  return state.jobs.find(j => {
+    const body = (j.extendedData && j.extendedData.body) || '';
+    return body.includes('"mode":"strike"')
+        && body.includes(expectedBodyFragment)
+        && body.includes(expectedHour);
+  });
+}
+
+function findWatcherJob(targetIso, targetHour) {
+  const expectedBodyFragment = `"target_date":"${targetIso}"`;
+  const expectedHour = `"target_hour":"${targetHour}"`;
+  return state.jobs.find(j => {
+    const body = (j.extendedData && j.extendedData.body) || '';
+    return body.includes('"mode":"backup"')
+        && body.includes(expectedBodyFragment)
+        && body.includes(expectedHour);
+  });
+}
+
+function getActiveWatchers() {
+  return state.jobs.filter(j => {
+    const body = (j.extendedData && j.extendedData.body) || '';
+    return body.includes('"mode":"backup"');
+  });
+}
+
+function parseWatcherInfo(job) {
+  const body = (job.extendedData && job.extendedData.body) || '';
+  const dateMatch = body.match(/"target_date":"([^"]+)"/);
+  const hourMatch = body.match(/"target_hour":"([^"]+)"/);
+  if (!dateMatch || !hourMatch) return null;
+  return { iso: dateMatch[1], hour: parseInt(hourMatch[1]) };
+}
+
+// ─── Rendering ─────────────────────────────────────────────
+function renderMain() {
+  const root = document.getElementById('main-content');
+  if (!hasCredentials()) {
+    root.innerHTML = `
+      <div class="section">
+        <div class="empty">
+          <strong>Configuration requise</strong>
+          Ouvre les réglages pour saisir ton token GitHub et ta clé cron-job.org.
+        </div>
+      </div>
+    `;
+    return;
+  }
+  root.innerHTML = `
+    ${renderStrikes()}
+    ${renderWatcher()}
+    ${renderHistory()}
+  `;
+  attachStrikeHandlers();
+  attachWatcherHandlers();
+}
+
+function renderStrikes() {
+  if (state.openDates.length === 0) {
+    return `
+      <div class="section">
+        <h2><span class="emoji">🎯</span> Strikes programmés</h2>
+        <div class="empty">Chargement<span class="loading-dots"></span></div>
+      </div>
+    `;
+  }
+  const now = new Date();
+  const todayIso = toISODate(now);
+  const currentHour = now.getHours();
+
+  let html = '<div class="section"><h2><span class="emoji">🎯</span> Strikes programmés</h2>';
+  state.openDates.forEach(item => {
+    const isToday = item.iso === todayIso;
+    const dayClass = isToday ? 'date-day today' : 'date-day';
+    let badge = '';
+    if (item.holiday) {
+      badge = `<span class="date-badge holiday">🇫🇷 ${item.holiday.name}</span>`;
+    }
+    if (isToday) {
+      badge += `<span class="date-badge">Aujourd'hui</span>`;
+    }
+    html += `<div class="date-card">`;
+    html += `<div class="date-header"><div class="${dayClass}">${formatDateShort(item.date)}</div>${badge}</div>`;
+    html += `<div class="slots">`;
+    SLOTS.forEach(h => {
+      const job = findStrikeJob(item.iso, h);
+      const armed = !!(job && job.enabled);
+      // Le strike est "passé" si l'ouverture J-2 à h est dépassée
+      const opening = getOpeningDateTime(item.iso, h);
+      const openingDate = new Date(opening.date);
+      openingDate.setHours(h, 0, 0, 0);
+      const passed = openingDate < now;
+      const cls = passed ? 'slot passed' : (armed ? 'slot armed' : 'slot');
+      const dataAttr = passed ? '' : `data-iso="${item.iso}" data-hour="${h}" data-job-id="${job ? job.jobId : ''}"`;
+      let meta = '';
+      if (armed) meta = '<span class="meta">Armé</span>';
+      else if (!passed) {
+        meta = `<span class="meta">Ouvre ${opening.dayName.slice(0,3)} ${h}h</span>`;
+      } else {
+        meta = '<span class="meta">Passé</span>';
+      }
+      html += `<button class="${cls}" ${dataAttr}>${h}h${meta}</button>`;
+    });
+    html += `</div></div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderWatcher() {
+  // Build datelist (today + open dates)
+  const datelist = state.openDates.map(d =>
+    `<option value="${d.iso}">${formatDateShort(d.date)}${d.holiday ? ' 🇫🇷' : ''}</option>`
+  ).join('');
+
+  const activeWatchers = getActiveWatchers();
+  let watchersHtml = '';
+  if (activeWatchers.length > 0) {
+    watchersHtml = `<div class="watchers-list"><div class="label">Watchers actifs</div>`;
+    activeWatchers.forEach(j => {
+      const info = parseWatcherInfo(j);
+      if (info) {
+        const [y, m, d] = info.iso.split('-').map(Number);
+        const dt = new Date(y, m - 1, d);
+        watchersHtml += `
+          <div class="watcher-item">
+            <div class="info">${formatDateShort(dt)} ${info.hour}h</div>
+            <button class="stop-btn" data-stop-id="${j.jobId}">Arrêter</button>
+          </div>`;
+      }
+    });
+    watchersHtml += `</div>`;
+  }
+
+  return `
+    <div class="section">
+      <h2><span class="emoji">👁️</span> Watcher (annulation)</h2>
+      <div class="watcher-form">
+        <div class="field">
+          <label>Date cible</label>
+          <select id="watcher-date">${datelist}</select>
+        </div>
+        <div class="field">
+          <label>Heure</label>
+          <div class="hour-pills">
+            ${SLOTS.map(h =>
+              `<button class="hour-pill ${h === state.watcherHour ? 'selected' : ''}" data-watcher-hour="${h}">${h}h</button>`
+            ).join('')}
+          </div>
+        </div>
+        <button class="btn" id="start-watcher">Démarrer le watcher</button>
+      </div>
+      ${watchersHtml}
+    </div>
+  `;
+}
+
+function renderHistory() {
+  let html = '<div class="section"><h2><span class="emoji">📊</span> Historique</h2>';
+  if (state.runs.length === 0) {
+    html += '<div class="history-empty">Aucun run récent. Charge l\'historique en glissant vers le bas.</div>';
+  } else {
+    state.runs.slice(0, 5).forEach(r => {
+      let dotClass = 'pending';
+      if (r.status === 'completed') {
+        dotClass = r.conclusion === 'success' ? 'ok' : 'err';
+      }
+      const dt = new Date(r.created_at);
+      const dtStr = dt.toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+      html += `<div class="run-item ${dotClass}">
+        <div class="dot"></div>
+        <div class="info">
+          <div class="title">${r.display_title || r.name}</div>
+          <div class="meta">${dtStr} · <a href="${r.html_url}" target="_blank">Voir log</a></div>
+        </div>
+      </div>`;
+    });
+  }
+  html += '</div>';
+  return html;
+}
+
+// ─── Handlers ─────────────────────────────────────────────
+function attachStrikeHandlers() {
+  document.querySelectorAll('.slot[data-iso]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (btn.classList.contains('loading')) return;
+      const iso = btn.dataset.iso;
+      const hour = parseInt(btn.dataset.hour);
+      const jobId = btn.dataset.jobId;
+      btn.classList.add('loading');
+      try {
+        if (jobId) {
+          await cronDelete(parseInt(jobId));
+          setStatus(`✅ Strike ${formatDateShort(new Date(iso))} ${hour}h supprimé`, 'ok');
+        } else {
+          const ghToken = getStorage(STORAGE_KEYS.ghToken);
+          const ghRepo = getStorage(STORAGE_KEYS.ghRepo, DEFAULTS.ghRepo);
+          const def = buildStrikeCronDef(iso, hour, ghToken, ghRepo);
+          await cronCreate(def);
+          setStatus(`🎯 Strike armé pour ${formatDateShort(new Date(iso))} ${hour}h`, 'ok');
+        }
+        await refreshData();
+      } catch (e) {
+        console.error(e);
+        setStatus(`❌ ${e.message}`, 'err');
+        btn.classList.remove('loading');
+      }
+    });
+  });
+}
+
+function attachWatcherHandlers() {
+  document.querySelectorAll('[data-watcher-hour]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.watcherHour = parseInt(btn.dataset.watcherHour);
+      document.querySelectorAll('[data-watcher-hour]').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+  });
+  const startBtn = document.getElementById('start-watcher');
+  if (startBtn) {
+    startBtn.addEventListener('click', async () => {
+      const dateSel = document.getElementById('watcher-date');
+      const iso = dateSel.value;
+      const hour = state.watcherHour;
+      const existing = findWatcherJob(iso, hour);
+      if (existing) {
+        setStatus('Un watcher est déjà actif pour ce créneau.', 'warn');
+        return;
+      }
+      startBtn.disabled = true;
+      try {
+        const ghToken = getStorage(STORAGE_KEYS.ghToken);
+        const ghRepo = getStorage(STORAGE_KEYS.ghRepo, DEFAULTS.ghRepo);
+        const def = buildWatcherCronDef(iso, hour, ghToken, ghRepo);
+        await cronCreate(def);
+        setStatus(`👁️ Watcher démarré pour ${formatDateShort(new Date(iso))} ${hour}h`, 'ok');
+        await refreshData();
+      } catch (e) {
+        setStatus(`❌ ${e.message}`, 'err');
+      } finally {
+        startBtn.disabled = false;
+      }
+    });
+  }
+  document.querySelectorAll('[data-stop-id]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const jobId = parseInt(btn.dataset.stopId);
+      btn.disabled = true;
+      try {
+        await cronDelete(jobId);
+        setStatus('🛑 Watcher arrêté', 'ok');
+        await refreshData();
+      } catch (e) {
+        setStatus(`❌ ${e.message}`, 'err');
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+// ─── Data refresh ─────────────────────────────────────────
+async function refreshData() {
+  if (!hasCredentials()) {
+    renderMain();
+    return;
+  }
+  try {
+    const [jobs, runs] = await Promise.all([
+      cronListJobs(),
+      ghListRuns(10).catch(() => [])
+    ]);
+    state.jobs = jobs;
+    state.runs = runs;
+    state.openDates = nextOpenDates(28);
+    document.getElementById('last-sync').textContent = 'Sync ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    renderMain();
+  } catch (e) {
+    console.error(e);
+    setStatus(`❌ Erreur de synchronisation : ${e.message}`, 'err');
+    state.openDates = nextOpenDates(28);
+    renderMain();
+  }
+}
+
+// ============================================================
+// SETTINGS OVERLAY
+// ============================================================
+function openSettings() {
+  document.getElementById('gh-token').value = getStorage(STORAGE_KEYS.ghToken);
+  document.getElementById('cron-key').value = getStorage(STORAGE_KEYS.cronKey);
+  document.getElementById('gh-repo').value = getStorage(STORAGE_KEYS.ghRepo, DEFAULTS.ghRepo);
+  document.getElementById('settings-overlay').classList.add('active');
+}
+function closeSettings() {
+  document.getElementById('settings-overlay').classList.remove('active');
+}
+
+document.getElementById('open-settings').addEventListener('click', openSettings);
+document.getElementById('close-settings').addEventListener('click', closeSettings);
+document.getElementById('save-settings').addEventListener('click', () => {
+  setStorage(STORAGE_KEYS.ghToken, document.getElementById('gh-token').value.trim());
+  setStorage(STORAGE_KEYS.cronKey, document.getElementById('cron-key').value.trim());
+  setStorage(STORAGE_KEYS.ghRepo, document.getElementById('gh-repo').value.trim() || DEFAULTS.ghRepo);
+  closeSettings();
+  setStatus('Réglages enregistrés', 'ok');
+  refreshData();
+});
+document.getElementById('reset-data').addEventListener('click', () => {
+  if (!confirm('Supprimer le token GitHub et la clé cron-job.org de cet appareil ?')) return;
+  Object.values(STORAGE_KEYS).forEach(k => localStorage.removeItem(k));
+  closeSettings();
+  setStatus('Données effacées', 'info');
+  renderMain();
+});
+
+// ============================================================
+// BOOT
+// ============================================================
+state.openDates = nextOpenDates(28);
+renderMain();
+if (hasCredentials()) refreshData();
+else openSettings();
+
+// Pull-to-refresh : double-tap header
+let lastTap = 0;
+document.querySelector('.topbar').addEventListener('click', () => {
+  const now = Date.now();
+  if (now - lastTap < 500) refreshData();
+  lastTap = now;
+});
+</script>
+</body>
+</html>
