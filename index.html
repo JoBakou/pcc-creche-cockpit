@@ -480,7 +480,7 @@
   <div id="main-content"></div>
 
   <div class="footer">
-    Bot piloté · v2 · <span id="last-sync"></span>
+    Bot piloté · v3 · <span id="last-sync"></span>
   </div>
 </div>
 
@@ -691,11 +691,23 @@ async function cronListJobs() {
   return detailed;
 }
 
-// Construit la définition d'un cron pour le mode STRIKE
-function buildStrikeCronDef(targetIso, targetHour, ghToken, ghRepo) {
-  const opening = getOpeningDateTime(targetIso, targetHour);
-  const [y, m, d] = opening.iso.split('-').map(Number);
-  const strikeAtUTC = parisToUTCISO(opening.iso, targetHour);
+// Construit la définition d'un cron pour le mode STRIKE.
+// chain (optionnel) : tir enchaîné — au lieu de tirer à l'ouverture 48h,
+// on tire à l'instant où la résa précédente démarre et nous libère.
+function buildStrikeCronDef(targetIso, targetHour, ghToken, ghRepo, chain) {
+  const [ty, tm, td] = targetIso.split('-').map(Number);
+  let strikeAtUTC, fireDateIso, fireHour;
+  if (chain) {
+    strikeAtUTC = chain.strikeAtUTC;
+    fireDateIso = chain.parisDateIso;
+    fireHour = chain.parisHour;
+  } else {
+    const opening = getOpeningDateTime(targetIso, targetHour);
+    strikeAtUTC = parisToUTCISO(opening.iso, targetHour);
+    fireDateIso = opening.iso;
+    fireHour = targetHour;
+  }
+  const [y, m, d] = fireDateIso.split('-').map(Number);
   const body = JSON.stringify({
     ref: 'main',
     inputs: {
@@ -706,20 +718,11 @@ function buildStrikeCronDef(targetIso, targetHour, ghToken, ghRepo) {
       dry_run: 'false'
     }
   });
-  // On déclenche le workflow 5 minutes avant l'heure d'ouverture (le bot interne dort jusqu'au strike)
-  let triggerHour = targetHour;
-  let triggerMinute = 55;
-  if (triggerMinute >= 60) { triggerMinute -= 60; triggerHour += 1; }
-  if (triggerHour === targetHour && triggerMinute === 0) {
-    // Edge case : si on voulait déclencher pile à l'heure, retire 5 minutes propres
-    triggerHour = targetHour - 1;
-    triggerMinute = 55;
-  } else {
-    triggerHour = targetHour - 1;
-    triggerMinute = 55;
-  }
+  // On déclenche le workflow 5 minutes avant l'heure du tir (le bot interne dort jusqu'au strike)
+  const triggerHour = fireHour - 1;
+  const triggerMinute = 55;
   return {
-    title: `🎯 Strike ${formatDateShort(new Date(y, m - 1, d + 2))} ${targetHour}h`,
+    title: `🎯 Strike ${formatDateShort(new Date(ty, tm - 1, td))} ${targetHour}h${chain ? ' (enchaîné)' : ''}`,
     url: `https://api.github.com/repos/${ghRepo}/actions/workflows/${WORKFLOW_FILE}/dispatches`,
     enabled: true,
     saveResponses: false,
@@ -895,6 +898,7 @@ const state = {
   openDates: [],     // Prochaines dates ouvrables
   runs: [],          // Derniers runs GitHub
   bookedKeys: new Set(),    // Créneaux déjà réservés (clés "date|heure" Paris)
+  bookings: [],             // Réservations brutes (pour le calcul des strikes enchaînés)
   bookingsUpdatedAt: null,  // Fraîcheur du registre reservations.json
   bookingsError: false,     // true si le registre est illisible (permission token ?)
   watcherHour: 13,
@@ -909,6 +913,50 @@ function setStatus(text, type) {
 
 function hasCredentials() {
   return !!getStorage(STORAGE_KEYS.ghToken) && !!getStorage(STORAGE_KEYS.cronKey);
+}
+
+// Règle du club : UNE seule réservation à venir à la fois. La suivante ne se
+// débloque qu'à l'instant où la résa en cours démarre. Pour chaque créneau,
+// cette fonction décide donc du bon plan de tir :
+//  - 'passed'  : créneau commencé, ou ouverture passée sans possibilité de chaîner
+//  - 'blocked' : une résa démarre APRÈS ce créneau → impossible à réserver
+//  - 'chained' : une résa nous bloque entre l'ouverture et le créneau
+//                → tir à l'instant exact où elle démarre (+1ms côté bot)
+//  - 'opening' : cas normal → tir à l'ouverture (48h avant, à l'heure du créneau)
+function computeStrikePlan(targetIso, targetHour) {
+  const now = new Date();
+  const targetStart = new Date(parisToUTCISO(targetIso, targetHour));
+  if (targetStart <= now) return { type: 'passed' };
+  const opening = getOpeningDateTime(targetIso, targetHour);
+  const openingUtc = new Date(parisToUTCISO(opening.iso, targetHour));
+  let latestBlock = null;   // résa qui bloque entre l'ouverture et le créneau
+  let blockerAfter = false; // résa démarrant après le créneau → impossible
+  (state.bookings || []).forEach(b => {
+    if (!b || !b.start) return;
+    const label = ((b.label || '') + ' ' + (b.group || '')).toUpperCase();
+    if (!label.includes(TASK_NAME)) return;
+    const s = new Date(b.start);
+    if (isNaN(s) || s <= now) return;       // déjà commencée : ne bloque plus
+    if (s >= targetStart) { blockerAfter = true; return; }
+    if (s > openingUtc && (!latestBlock || s > latestBlock)) latestBlock = s;
+  });
+  if (blockerAfter) return { type: 'blocked' };
+  if (latestBlock) {
+    const key = parisKeyFromUTC(latestBlock.toISOString());
+    const [parisDateIso, hourStr] = key.split('|');
+    const parisHour = parseInt(hourStr, 10);
+    const [py, pm, pd] = parisDateIso.split('-').map(Number);
+    const dayShort = DAY_NAMES[new Date(py, pm - 1, pd).getDay()].slice(0, 3);
+    return {
+      type: 'chained',
+      strikeAtUTC: latestBlock.toISOString().replace('.000Z', 'Z'),
+      parisDateIso,
+      parisHour,
+      label: `Tir ${dayShort} ${parisHour}h`
+    };
+  }
+  if (openingUtc <= now) return { type: 'passed' };
+  return { type: 'opening', opening };
 }
 
 // Détecte les crons auto_strike permanents (métronomes jeudi/vendredi 12h55)
@@ -1024,20 +1072,12 @@ function renderStrikes() {
       const booked = state.bookedKeys.has(item.iso + '|' + h);
       const job = findStrikeJob(item.iso, h);
       const armed = !!(job && job.enabled);
-      // Le strike est "passé" si l'ouverture J-2 à h est dépassée
-      const opening = getOpeningDateTime(item.iso, h);
-      const openingDate = new Date(opening.date);
-      openingDate.setHours(h, 0, 0, 0);
-      const passed = openingDate < now;
       const dow = item.date.getDay();
       const isAuto = h === 13 && ((dow === 6 && auto.sat) || (dow === 0 && auto.sun));
       let cls, meta, dataAttr = '';
       if (booked) {
         cls = 'slot booked';
         meta = '<span class="meta">✓ Réservé</span>';
-      } else if (passed) {
-        cls = 'slot passed';
-        meta = '<span class="meta">Passé</span>';
       } else if (armed) {
         // Un cron ponctuel existe : on le montre (tap = le supprimer)
         cls = 'slot armed';
@@ -1048,9 +1088,22 @@ function renderStrikes() {
         cls = 'slot auto';
         meta = '<span class="meta">Auto</span>';
       } else {
-        cls = 'slot';
-        dataAttr = `data-iso="${item.iso}" data-hour="${h}" data-job-id=""`;
-        meta = `<span class="meta">Ouvre ${opening.dayName.slice(0,3)} ${h}h</span>`;
+        const plan = computeStrikePlan(item.iso, h);
+        if (plan.type === 'passed') {
+          cls = 'slot passed';
+          meta = '<span class="meta">Passé</span>';
+        } else if (plan.type === 'blocked') {
+          cls = 'slot passed';
+          meta = '<span class="meta">Bloqué</span>';
+        } else if (plan.type === 'chained') {
+          cls = 'slot';
+          dataAttr = `data-iso="${item.iso}" data-hour="${h}" data-job-id="" data-chain="${plan.strikeAtUTC}|${plan.parisDateIso}|${plan.parisHour}"`;
+          meta = `<span class="meta">${plan.label}</span>`;
+        } else {
+          cls = 'slot';
+          dataAttr = `data-iso="${item.iso}" data-hour="${h}" data-job-id=""`;
+          meta = `<span class="meta">Ouvre ${plan.opening.dayName.slice(0,3)} ${h}h</span>`;
+        }
       }
       html += `<button class="${cls}" ${dataAttr}>${h}h${meta}</button>`;
     });
@@ -1149,9 +1202,18 @@ function attachStrikeHandlers() {
         } else {
           const ghToken = getStorage(STORAGE_KEYS.ghToken);
           const ghRepo = getStorage(STORAGE_KEYS.ghRepo, DEFAULTS.ghRepo);
-          const def = buildStrikeCronDef(iso, hour, ghToken, ghRepo);
+          let chain = null;
+          if (btn.dataset.chain) {
+            const [u, di, ph] = btn.dataset.chain.split('|');
+            chain = { strikeAtUTC: u, parisDateIso: di, parisHour: parseInt(ph, 10) };
+          }
+          const def = buildStrikeCronDef(iso, hour, ghToken, ghRepo, chain);
           await cronCreate(def);
-          setStatus(`🎯 Strike armé pour ${formatDateShort(new Date(iso))} ${hour}h`, 'ok');
+          if (chain) {
+            setStatus(`🎯 Strike enchaîné armé pour ${formatDateShort(new Date(iso))} ${hour}h — tir à ${chain.parisHour}h pile, dès que ta résa précédente te libère`, 'ok');
+          } else {
+            setStatus(`🎯 Strike armé pour ${formatDateShort(new Date(iso))} ${hour}h`, 'ok');
+          }
         }
         await refreshData();
       } catch (e) {
@@ -1246,10 +1308,12 @@ async function refreshData() {
     state.runs = runs;
     if (bookingsData && Array.isArray(bookingsData.bookings)) {
       state.bookedKeys = buildBookedKeys(bookingsData.bookings);
+      state.bookings = bookingsData.bookings;
       state.bookingsUpdatedAt = bookingsData.updated_at || null;
       state.bookingsError = false;
     } else {
       state.bookedKeys = new Set();
+      state.bookings = [];
       state.bookingsUpdatedAt = null;
       state.bookingsError = true;
     }
